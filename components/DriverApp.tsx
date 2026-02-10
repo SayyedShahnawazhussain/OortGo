@@ -38,15 +38,12 @@ const DriverApp: React.FC = () => {
   const [requestTimer, setRequestTimer] = useState(15);
   const [distanceToTarget, setDistanceToTarget] = useState(1200);
 
-  // WALLET & BACKEND SYNC LOGIC
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
-  // Simulated backend fetch for balance and transactions
   const fetchWalletData = async () => {
     setIsLoadingBalance(true);
     await new Promise(r => setTimeout(r, 800));
-    
     const savedTransactions = localStorage.getItem('oortgo_transactions');
     if (savedTransactions) {
       setTransactions(JSON.parse(savedTransactions));
@@ -133,32 +130,6 @@ const DriverApp: React.FC = () => {
     return () => clearInterval(interval);
   }, [view, activeRide, rideStage]);
 
-  useEffect(() => {
-    if (view === 'DASHBOARD' && !activeRide && !incomingRide) {
-      const timer = setTimeout(() => {
-        setIncomingRide({
-          id: 'req_101',
-          passengerId: 'p1',
-          passengerName: 'Anjali Sharma',
-          passengerPhone: '+91 9988776655',
-          pickup: 'Terminal 3, IGI Airport',
-          destination: 'Connaught Place, Block B',
-          category: RideCategory.PRIVATE,
-          vehicleType: VehicleType.CAR_SEDAN,
-          bookingMode: BookingMode.NORMAL,
-          fare: 450,
-          status: 'PENDING',
-          distance: '1.2km',
-          duration: '25m',
-          otp: '1234'
-        });
-        setRequestTimer(15);
-        speakHindi("Aapke liye naya ride request hai.");
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [view, activeRide, incomingRide]);
-
   const handleAccept = () => {
     if (incomingRide) {
       setActiveRide(incomingRide);
@@ -198,78 +169,27 @@ const DriverApp: React.FC = () => {
     setView('NAVIGATING');
   };
 
-  const validatePayoutInfo = (): string | null => {
-    if (!bankDetails.accountName.trim()) return "Account holder name is required.";
-    if (!bankDetails.bankName.trim()) return "Bank name is required.";
-    if (!/^\d{9,18}$/.test(bankDetails.accountNumber)) return "Invalid bank account number (9-18 digits required).";
-    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(bankDetails.ifsc)) return "Invalid IFSC format (e.g., HDFC0001234).";
-    if (bankDetails.upiId && !/^[\w.-]+@[\w.-]+$/.test(bankDetails.upiId)) return "Invalid UPI ID format.";
-    return null;
-  };
-
   const handleSaveAccount = async () => {
     setValidationError(null);
-    const error = validatePayoutInfo();
-    if (error) {
-      setValidationError(error);
-      speakHindi("Kripya sahi jaankari bhare.");
-      return;
-    }
+    if (!bankDetails.accountName.trim()) { setValidationError("Name required"); return; }
+    if (!/^\d{9,18}$/.test(bankDetails.accountNumber)) { setValidationError("Invalid A/C Number"); return; }
 
     setIsSaving(true);
     await new Promise(r => setTimeout(r, 1200));
     localStorage.setItem('oortgo_bank_details', JSON.stringify(bankDetails));
-    if (upiQr) localStorage.setItem('oortgo_upi_qr', upiQr);
-    if (driverPhoto) localStorage.setItem('oortgo_driver_photo', driverPhoto);
-    
     setIsSaving(false);
     setSaveSuccess(true);
     speakHindi("Details save ho gayi hain.");
-    setTimeout(() => {
-      setSaveSuccess(false);
-      setView('DASHBOARD');
-    }, 1200);
+    setTimeout(() => { setSaveSuccess(false); setView('DASHBOARD'); }, 1200);
   };
 
   const handleTransferToBank = async () => {
-    if (totalNetBalance <= 0) {
-      speakHindi("Aapka balance kam hai.");
-      return;
-    }
-    
+    if (totalNetBalance <= 0) { speakHindi("Aapka balance kam hai."); return; }
     setIsLoadingBalance(true);
     await new Promise(r => setTimeout(r, 1500));
-    const payoutAmount = -totalNetBalance;
-    const payoutTransaction: Transaction = { id: `payout_${Date.now()}`, type: 'PAYOUT', amount: payoutAmount, timestamp: Date.now() };
-    setTransactions(prev => [...prev, payoutTransaction]);
+    setTransactions(prev => [...prev, { id: `payout_${Date.now()}`, type: 'PAYOUT', amount: -totalNetBalance, timestamp: Date.now() }]);
     setIsLoadingBalance(false);
     speakHindi("Paisay transfer kar diye gaye hain.");
-  };
-
-  const handleProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setDriverPhoto(base64);
-        localStorage.setItem('oortgo_driver_photo', base64);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleUpiQrChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setUpiQr(base64);
-        localStorage.setItem('oortgo_upi_qr', base64);
-      };
-      reader.readAsDataURL(file);
-    }
   };
 
   return (
@@ -302,188 +222,95 @@ const DriverApp: React.FC = () => {
               <div className="w-12" />
             </div>
 
-            {/* Profile Section */}
+            {/* Profile Header */}
             <div className="flex flex-col items-center mb-12">
               <div className="relative group">
                 <div className="w-32 h-32 bg-white/5 rounded-[44px] border border-white/10 flex items-center justify-center overflow-hidden shadow-2xl">
-                  {driverPhoto ? (
-                    <img src={driverPhoto} className="w-full h-full object-cover" />
-                  ) : (
-                    <User className="w-14 h-14 text-white/10" />
-                  )}
+                  {driverPhoto ? <img src={driverPhoto} className="w-full h-full object-cover" /> : <User className="w-14 h-14 text-white/10" />}
                 </div>
-                <button 
-                  onClick={() => profileFileInputRef.current?.click()}
-                  className="absolute -bottom-2 -right-2 w-12 h-12 bg-cyan-500 rounded-3xl flex items-center justify-center border-4 border-black shadow-xl active:scale-90 transition-all z-20"
-                >
-                  <Camera size={20} />
-                </button>
-                <input type="file" ref={profileFileInputRef} onChange={handleProfilePhotoChange} accept="image/*" className="hidden" />
+                <button onClick={() => profileFileInputRef.current?.click()} className="absolute -bottom-2 -right-2 w-12 h-12 bg-cyan-500 rounded-3xl flex items-center justify-center border-4 border-black shadow-xl active:scale-90 z-20"><Camera size={20} /></button>
+                <input type="file" ref={profileFileInputRef} onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => { setDriverPhoto(reader.result as string); localStorage.setItem('oortgo_driver_photo', reader.result as string); };
+                    reader.readAsDataURL(file);
+                  }
+                }} className="hidden" />
               </div>
               <h3 className="mt-6 text-2xl font-black tracking-tight">{bankDetails.accountName}</h3>
-              <div className="flex items-center space-x-2 bg-emerald-500/10 px-4 py-1.5 rounded-full border border-emerald-500/20 mt-2">
-                 <CheckCircle2 size={12} className="text-emerald-500" />
-                 <span className="text-[9px] text-emerald-500 font-black uppercase tracking-widest">Verified Partner</span>
-              </div>
             </div>
 
-            {/* Net Earnings Card - CENTERED & FIXED UI */}
-            <div className="bg-gradient-to-br from-[#0052D4] via-[#4364F7] to-[#6FB1FC] p-8 md:p-10 rounded-[52px] shadow-4xl mb-12 relative overflow-hidden border border-white/20 group">
-               <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-white/20 transition-colors" />
+            {/* Wallet Balance Card - PERFECTLY CENTERED */}
+            <div className="bg-gradient-to-br from-[#0052D4] via-[#4364F7] to-[#6FB1FC] p-8 md:p-12 rounded-[52px] shadow-4xl mb-12 relative overflow-hidden border border-white/20 group">
+               <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
                <div className="absolute bottom-0 left-0 w-32 h-32 bg-black/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl" />
 
-               <div className="relative z-10 flex flex-col items-center text-center">
-                 <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/70 mb-4">Total Net Balance</p>
+               <div className="relative z-10 flex flex-col items-center justify-center text-center py-4">
+                 <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/70 mb-6 drop-shadow-sm">Total Net Balance</p>
                  
-                 <div className="flex items-center justify-center w-full mb-8">
+                 <div className="flex items-center justify-center w-full mb-10 min-h-[80px]">
                    {isLoadingBalance ? (
-                     <Loader2 className="w-10 h-10 text-white animate-spin" />
+                     <Loader2 className="w-12 h-12 text-white animate-spin" />
                    ) : (
-                     <div className="flex items-baseline justify-center">
-                        <span className="text-3xl md:text-4xl font-black text-white/80 mr-2 drop-shadow-md">₹</span>
-                        <p className="text-5xl md:text-6xl font-black text-white tracking-tighter tabular-nums drop-shadow-2xl">
-                          {totalNetBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                     <div className="flex items-center justify-center">
+                        <span className="text-3xl md:text-4xl font-black text-white/60 mr-3 mb-2 tabular-nums">₹</span>
+                        <p className="text-6xl md:text-7xl font-black text-white tracking-tighter tabular-nums drop-shadow-[0_10px_30px_rgba(0,0,0,0.3)] leading-none">
+                          {totalNetBalance.toLocaleString('en-IN', { minimumFractionDigits: 0 })}
                         </p>
                      </div>
                    )}
                  </div>
 
-                 <div className="grid grid-cols-2 gap-3 w-full mb-10">
-                    <div className="bg-white/10 backdrop-blur-md p-4 rounded-3xl border border-white/10 flex flex-col items-center justify-center">
-                       <p className="text-[8px] font-black text-white/50 uppercase tracking-widest mb-1">Commission</p>
-                       <p className="text-sm font-black text-white">10%</p>
-                    </div>
-                    <div className="bg-white/10 backdrop-blur-md p-4 rounded-3xl border border-white/10 flex flex-col items-center justify-center">
-                       <p className="text-[8px] font-black text-white/50 uppercase tracking-widest mb-1">Status</p>
-                       <p className="text-[9px] font-black text-white uppercase tracking-tighter">Verified</p>
-                    </div>
-                 </div>
-
-                 <div className="flex space-x-3 w-full">
+                 <div className="flex space-x-3 w-full max-w-[340px]">
                     <button 
                       onClick={handleTransferToBank}
                       disabled={isLoadingBalance || totalNetBalance <= 0}
-                      className="flex-1 bg-white text-blue-600 py-6 rounded-[30px] font-black uppercase tracking-widest text-[11px] shadow-xl active:scale-95 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+                      className="flex-1 bg-white text-blue-600 py-6 rounded-[32px] font-black uppercase tracking-widest text-[11px] shadow-2xl active:scale-95 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
                     >
                        {isLoadingBalance ? <Loader2 className="animate-spin w-4 h-4" /> : <><ArrowRightLeft size={16} /><span>Transfer to Bank</span></>}
                     </button>
-                    <button className="w-20 bg-black/20 backdrop-blur-md text-white rounded-[30px] flex items-center justify-center border border-white/10 active:scale-90 transition-all shadow-lg hover:bg-black/30">
+                    <button className="w-20 bg-black/20 backdrop-blur-md text-white rounded-[32px] flex items-center justify-center border border-white/10 active:scale-90 transition-all shadow-lg hover:bg-black/30">
                        <History size={24} />
                     </button>
                  </div>
                </div>
             </div>
 
-            {/* Validation Feedback */}
-            {validationError && (
-              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 p-5 bg-rose-500/10 border border-rose-500/20 rounded-[32px] flex items-center space-x-4">
-                <AlertCircle size={20} className="text-rose-500 shrink-0" />
-                <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">{validationError}</p>
-              </motion.div>
-            )}
-
-            {/* Payout & Bank Details */}
+            {/* Form Sections */}
             <div className="space-y-8">
               <div className="bg-white/5 p-10 rounded-[52px] border border-white/10 space-y-8 shadow-inner">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-cyan-500/10 rounded-2xl flex items-center justify-center border border-cyan-500/20"><Landmark className="text-cyan-500" size={18} /></div>
-                  <p className="text-[11px] text-zinc-500 font-black uppercase tracking-widest">Bank Details</p>
-                </div>
+                <div className="flex items-center space-x-3"><Landmark className="text-cyan-500" size={18} /><p className="text-[11px] text-zinc-500 font-black uppercase tracking-widest">Bank Details</p></div>
                 <div className="space-y-6">
-                  <div className="space-y-1">
-                    <p className="text-[9px] font-bold text-zinc-600 uppercase ml-4">Account Holder Name</p>
-                    <input 
-                      value={bankDetails.accountName} 
-                      onChange={e => setBankDetails({...bankDetails, accountName: e.target.value})} 
-                      className="w-full bg-white/5 p-6 rounded-[32px] border border-white/5 font-bold text-white outline-none focus:border-cyan-500/50 transition-colors" 
-                      placeholder="e.g. Rahul Kumar" 
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[9px] font-bold text-zinc-600 uppercase ml-4">Bank Name</p>
-                    <input 
-                      value={bankDetails.bankName} 
-                      onChange={e => setBankDetails({...bankDetails, bankName: e.target.value})} 
-                      className="w-full bg-white/5 p-6 rounded-[32px] border border-white/5 font-bold text-white outline-none focus:border-cyan-500/50 transition-colors" 
-                      placeholder="e.g. HDFC Bank" 
-                    />
+                  <div className="space-y-1"><p className="text-[9px] font-bold text-zinc-600 uppercase ml-4">Holder Name</p>
+                    <input value={bankDetails.accountName} onChange={e => setBankDetails({...bankDetails, accountName: e.target.value})} className="w-full bg-white/5 p-6 rounded-[32px] border border-white/5 font-bold text-white outline-none focus:border-cyan-500/50" />
                   </div>
                   <div className="grid grid-cols-2 gap-5">
-                    <div className="space-y-1">
-                      <p className="text-[9px] font-bold text-zinc-600 uppercase ml-4">Account Number</p>
-                      <input 
-                        value={bankDetails.accountNumber} 
-                        onChange={e => setBankDetails({...bankDetails, accountNumber: e.target.value.replace(/\D/g, '')})} 
-                        className="w-full bg-white/5 p-6 rounded-[32px] border border-white/5 font-bold text-white outline-none focus:border-cyan-500/50 transition-colors tabular-nums" 
-                        placeholder="Numeric only" 
-                      />
+                    <div className="space-y-1"><p className="text-[9px] font-bold text-zinc-600 uppercase ml-4">Account Number</p>
+                      <input value={bankDetails.accountNumber} onChange={e => setBankDetails({...bankDetails, accountNumber: e.target.value.replace(/\D/g, '')})} className="w-full bg-white/5 p-6 rounded-[32px] border border-white/5 font-bold text-white" />
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-[9px] font-bold text-zinc-600 uppercase ml-4">IFSC Code</p>
-                      <input 
-                        value={bankDetails.ifsc} 
-                        onChange={e => setBankDetails({...bankDetails, ifsc: e.target.value.toUpperCase()})} 
-                        className="w-full bg-white/5 p-6 rounded-[32px] border border-white/5 font-bold text-white outline-none focus:border-cyan-500/50 transition-colors uppercase" 
-                        placeholder="HDFC0001234" 
-                      />
+                    <div className="space-y-1"><p className="text-[9px] font-bold text-zinc-600 uppercase ml-4">IFSC</p>
+                      <input value={bankDetails.ifsc} onChange={e => setBankDetails({...bankDetails, ifsc: e.target.value.toUpperCase()})} className="w-full bg-white/5 p-6 rounded-[32px] border border-white/5 font-bold text-white" />
                     </div>
                   </div>
                 </div>
               </div>
-
-              {/* UPI Section */}
-              <div className="bg-white/5 p-10 rounded-[52px] border border-white/10 space-y-8">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-cyan-500/10 rounded-2xl flex items-center justify-center border border-cyan-500/20"><QrCode className="text-cyan-500" size={18} /></div>
-                  <p className="text-[11px] text-zinc-500 font-black uppercase tracking-widest">UPI ID & QR</p>
-                </div>
-
-                <div className="space-y-4">
-                   <p className="text-[9px] font-bold text-zinc-600 uppercase ml-4">UPI ID</p>
-                   <input 
-                     value={bankDetails.upiId} 
-                     onChange={e => setBankDetails({...bankDetails, upiId: e.target.value})} 
-                     className="w-full bg-white/5 p-6 rounded-[32px] border border-white/5 font-bold text-white outline-none focus:border-cyan-500/50 transition-colors" 
-                     placeholder="rahulk@upi" 
-                   />
-                </div>
-                
-                <div 
-                  onClick={() => upiFileInputRef.current?.click()}
-                  className="aspect-square w-full max-w-[280px] mx-auto bg-white/5 border-2 border-dashed border-white/10 rounded-[44px] flex flex-col items-center justify-center cursor-pointer overflow-hidden group hover:border-cyan-500/40 transition-all shadow-inner"
-                >
-                  {upiQr ? (
-                    <img src={upiQr} className="w-full h-full object-contain p-6" />
-                  ) : (
-                    <>
-                      <Upload className="text-white/10 mb-2 group-hover:text-cyan-500 transition-colors" />
-                      <p className="text-[10px] font-black text-white/30 uppercase">Upload UPI QR</p>
-                    </>
-                  )}
-                </div>
-                <input type="file" ref={upiFileInputRef} onChange={handleUpiQrChange} accept="image/*" className="hidden" />
-              </div>
             </div>
 
-            <div className="mt-16 space-y-6">
-              <button 
-                disabled={isSaving} 
-                onClick={handleSaveAccount} 
-                className={`w-full py-8 rounded-[40px] font-black uppercase tracking-[0.4em] text-sm flex items-center justify-center space-x-3 shadow-4xl transition-all active:scale-95 ${saveSuccess ? 'bg-emerald-500 text-white' : 'bg-white text-black'}`}
-              >
-                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : saveSuccess ? <Check /> : <><Save size={20} /><span>Save Payout Details</span></>}
-              </button>
-            </div>
+            <button onClick={handleSaveAccount} disabled={isSaving} className={`mt-10 w-full py-8 rounded-[40px] font-black uppercase tracking-[0.4em] text-sm flex items-center justify-center space-x-3 shadow-4xl transition-all ${saveSuccess ? 'bg-emerald-500 text-white' : 'bg-white text-black'}`}>
+              {isSaving ? <Loader2 className="animate-spin" /> : saveSuccess ? <Check /> : <><Save size={20} /><span>Save Changes</span></>}
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* ONLINE DASHBOARD */}
       <div className="mt-auto p-6 pb-12 z-50">
         <AnimatePresence mode="wait">
           {view === 'DASHBOARD' && !incomingRide && (
             <motion.div initial={{ y: 100 }} animate={{ y: 0 }} className="flex flex-col items-center py-10">
                <div className="w-full flex justify-between items-center mb-10 px-4">
-                 <button onClick={() => setView('ACCOUNT')} className="flex items-center space-x-4 bg-black/90 backdrop-blur-3xl border border-white/10 p-3 pr-8 rounded-[36px] active:scale-95 transition-all shadow-4xl ring-1 ring-white/5">
+                 <button onClick={() => setView('ACCOUNT')} className="flex items-center space-x-4 bg-black/90 backdrop-blur-3xl border border-white/10 p-3 pr-8 rounded-[36px] active:scale-95 transition-all shadow-4xl">
                     <div className="w-14 h-14 rounded-[24px] bg-white/10 overflow-hidden border border-white/10">
                       {driverPhoto ? <img src={driverPhoto} className="w-full h-full object-cover" /> : <User className="w-full h-full p-4 text-white/20" />}
                     </div>
@@ -492,10 +319,9 @@ const DriverApp: React.FC = () => {
                       <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mt-0.5">Online • Searching</p>
                     </div>
                  </button>
-                 
                  <button onClick={() => setView('ACCOUNT')} className="w-16 h-16 bg-white/5 backdrop-blur-xl rounded-[28px] flex items-center justify-center border border-white/10 relative active:scale-90 transition-all">
                    <Wallet className="w-7 h-7 text-white/60" />
-                   <div className="absolute -top-1 -right-1 w-5 h-5 bg-cyan-500 rounded-full border-4 border-black flex items-center justify-center text-[10px] font-black animate-pulse">!</div>
+                   <div className="absolute -top-1 -right-1 w-5 h-5 bg-cyan-500 rounded-full border-4 border-black flex items-center justify-center text-[10px] font-black">!</div>
                  </button>
                </div>
                
@@ -505,8 +331,8 @@ const DriverApp: React.FC = () => {
                     <Activity className="w-10 h-10 text-white" />
                  </div>
                </div>
-               <p className="text-sm font-black text-zinc-500 tracking-[0.4em] uppercase">Scanning Nearby Requests</p>
-               <button onClick={() => setView('OFFLINE')} className="mt-12 text-white/10 text-[11px] font-black uppercase tracking-widest border border-white/5 px-10 py-5 rounded-full hover:text-white hover:bg-white/5 transition-all">Switch Offline</button>
+               <p className="text-sm font-black text-zinc-500 tracking-[0.4em] uppercase">Searching Nearby Requests</p>
+               <button onClick={() => setView('OFFLINE')} className="mt-12 text-white/10 text-[11px] font-black uppercase tracking-widest border border-white/5 px-10 py-5 rounded-full hover:text-white transition-all">Go Offline</button>
             </motion.div>
           )}
 
@@ -516,17 +342,12 @@ const DriverApp: React.FC = () => {
               <div className="flex justify-between items-start mb-10">
                 <div>
                   <h2 className="text-5xl font-black tracking-tighter mb-2">{incomingRide.passengerName}</h2>
-                  <div className="flex items-center space-x-2">
-                    <p className="text-[11px] font-black text-zinc-400 uppercase tracking-widest">Incoming {incomingRide.vehicleType.replace('_', ' ')}</p>
-                    {incomingRide.bookingMode === BookingMode.SHARING && <span className="bg-cyan-100 text-cyan-600 px-3 py-1 rounded-full text-[9px] font-black uppercase">Shared Ride</span>}
-                  </div>
+                  <p className="text-[11px] font-black text-zinc-400 uppercase tracking-widest">Incoming {incomingRide.vehicleType.replace('_', ' ')}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-5xl font-black text-emerald-600 tracking-tighter tabular-nums">₹{incomingRide.fare}</p>
-                </div>
+                <div className="text-right"><p className="text-5xl font-black text-emerald-600 tracking-tighter tabular-nums">₹{incomingRide.fare}</p></div>
               </div>
               <div className="flex space-x-5">
-                <button onClick={() => setIncomingRide(null)} className="flex-1 py-8 bg-zinc-100 text-zinc-400 rounded-[38px] font-black uppercase text-xs tracking-widest active:scale-95 transition-transform">Ignore</button>
+                <button onClick={() => setIncomingRide(null)} className="flex-1 py-8 bg-zinc-100 text-zinc-400 rounded-[38px] font-black uppercase text-xs tracking-widest">Ignore</button>
                 <button onClick={handleAccept} className="flex-[2] py-8 bg-black text-white rounded-[38px] font-black uppercase tracking-[0.3em] text-sm shadow-2xl active:scale-95 transition-transform">Accept Ride</button>
               </div>
             </motion.div>
@@ -535,7 +356,7 @@ const DriverApp: React.FC = () => {
           {view === 'OTP_ENTRY' && activeRide && (
             <motion.div initial={{ y: 400 }} animate={{ y: 0 }} className="bg-zinc-950 rounded-[60px] border border-white/10 p-12 shadow-4xl text-center">
               <h3 className="text-3xl font-black text-white uppercase mb-4 tracking-tighter">Enter OTP Code</h3>
-              <p className="text-zinc-600 text-[11px] font-black uppercase tracking-widest mb-12">Ask passenger for Ride Verification OTP</p>
+              <p className="text-zinc-600 text-[11px] font-black uppercase tracking-widest mb-12">Ask passenger for Ride OTP</p>
               <div className={`flex justify-center space-x-5 mb-14 ${otpError ? 'animate-bounce' : ''}`}>
                 <input autoFocus type="tel" maxLength={4} value={otpValue} onChange={(e) => handleVerifyOTP(e.target.value)} className="w-full max-w-[320px] bg-white/5 border-2 border-white/10 rounded-[40px] py-10 text-6xl text-center font-black tracking-[0.5em] text-cyan-400 outline-none focus:border-cyan-500 transition-colors shadow-inner tabular-nums" placeholder="••••" />
               </div>
@@ -546,40 +367,6 @@ const DriverApp: React.FC = () => {
           )}
         </AnimatePresence>
       </div>
-
-      <AnimatePresence>
-        {view === 'NAVIGATING' && activeRide && (
-          <>
-            <motion.div initial={{ y: -100 }} animate={{ y: 0 }} className="absolute top-20 inset-x-6 z-[100]">
-              <div className="bg-black/95 backdrop-blur-3xl p-7 rounded-[40px] border border-white/10 shadow-4xl flex items-center justify-between ring-1 ring-white/10">
-                <div className="flex items-center space-x-6">
-                  <div className="w-16 h-16 bg-cyan-500 rounded-[24px] flex items-center justify-center shadow-xl shadow-cyan-500/30"><Navigation className="w-8 h-8 text-white rotate-45" /></div>
-                  <div>
-                    <p className="text-[10px] font-black text-cyan-500 uppercase mb-1 tracking-widest">{rideStage === 'PICKUP' ? 'Nav to Pickup' : 'Driving to Destination'}</p>
-                    <h3 className="text-xl font-black text-white tracking-tighter truncate max-w-[160px]">{rideStage === 'PICKUP' ? activeRide.pickup : activeRide.destination}</h3>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-3xl font-black text-cyan-400 tabular-nums">{(distanceToTarget / 1000).toFixed(1)} <span className="text-sm">km</span></p>
-                </div>
-              </div>
-            </motion.div>
-
-            <motion.div initial={{ y: 200 }} animate={{ y: 0 }} className="absolute bottom-10 inset-x-6 z-[100]">
-              <div className="bg-white rounded-[52px] p-10 shadow-4xl space-y-8">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-5">
-                    <div className="w-16 h-16 bg-zinc-100 rounded-[24px] flex items-center justify-center border border-zinc-200 shadow-inner"><User className="w-8 h-8 text-zinc-400" /></div>
-                    <div><p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Active Ride for</p><h4 className="text-3xl font-black text-black tracking-tighter">{activeRide.passengerName}</h4></div>
-                  </div>
-                  <a href={`tel:${activeRide.passengerPhone}`} className="w-16 h-16 bg-emerald-500 text-white rounded-[24px] flex items-center justify-center shadow-xl shadow-emerald-500/20 active:scale-90 transition-all"><PhoneCall size={28} /></a>
-                </div>
-                {rideStage === 'PICKUP' && <button onClick={() => setView('OTP_ENTRY')} className="w-full py-7 bg-black text-white rounded-[36px] font-black uppercase tracking-[0.3em] text-xs shadow-2xl active:bg-zinc-800 transition-colors">Confirm Arrival</button>}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
