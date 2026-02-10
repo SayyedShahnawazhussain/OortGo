@@ -1,0 +1,9 @@
+{
+  "name": "OortGo - AI-Powered Mobility",
+  "description": "A production-ready, ultra-premium mobility platform featuring AI-driven ride matching, cinematic logo transitions, and audio-first driver controls.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
